@@ -5,15 +5,15 @@ import XCTest
 final class HistoryStoreTests: XCTestCase {
     private var tmpURL: URL!
 
-    override func setUp() {
-        super.setUp()
+    override func setUp() async throws {
+        try await super.setUp()
         tmpURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("hop-tests-\(UUID().uuidString).json")
     }
 
-    override func tearDown() {
+    override func tearDown() async throws {
         try? FileManager.default.removeItem(at: tmpURL)
-        super.tearDown()
+        try await super.tearDown()
     }
 
     func test_recordAppendsEvent() {

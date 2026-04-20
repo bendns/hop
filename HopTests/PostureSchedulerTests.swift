@@ -26,8 +26,8 @@ final class PostureSchedulerTests: XCTestCase {
     private var suiteName: String!
     private var scheduler: PostureScheduler!
 
-    override func setUp() {
-        super.setUp()
+    override func setUp() async throws {
+        try await super.setUp()
         suiteName = "hop.tests.scheduler.\(UUID().uuidString)"
         defaults = UserDefaults(suiteName: suiteName)!
         let settingsSuite = "hop.tests.settings.\(UUID().uuidString)"
@@ -48,9 +48,9 @@ final class PostureSchedulerTests: XCTestCase {
         )
     }
 
-    override func tearDown() {
+    override func tearDown() async throws {
         defaults.removePersistentDomain(forName: suiteName)
-        super.tearDown()
+        try await super.tearDown()
     }
 
     func test_initialPosture_isSitting() {
