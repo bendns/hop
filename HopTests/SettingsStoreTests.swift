@@ -7,14 +7,12 @@ final class SettingsStoreTests: XCTestCase {
     private var defaults: UserDefaults!
 
     override func setUp() async throws {
-        try await super.setUp()
         suiteName = "hop.tests.\(UUID().uuidString)"
         defaults = UserDefaults(suiteName: suiteName)!
     }
 
     override func tearDown() async throws {
         defaults.removePersistentDomain(forName: suiteName)
-        try await super.tearDown()
     }
 
     func test_defaults_whenEmpty() {
