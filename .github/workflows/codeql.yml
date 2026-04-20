@@ -22,16 +22,19 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Initialize CodeQL
-        uses: github/codeql-action/init@v3
-        with:
-          languages: swift
-
+      # Install tooling BEFORE CodeQL initializes its tracer.
+      # The tracer's DYLD_INSERT_LIBRARIES forces subprocesses under Rosetta,
+      # which breaks `brew install` on an arm64 /opt/homebrew prefix.
       - name: Install XcodeGen
         run: brew install xcodegen
 
       - name: Generate Xcode project
         run: xcodegen generate
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: swift
 
       - name: Build for CodeQL
         run: |
