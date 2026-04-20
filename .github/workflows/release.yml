@@ -1,0 +1,110 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to release (e.g. v0.1.0)"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build and publish
+    runs-on: macos-15
+    timeout-minutes: 25
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve version
+        id: ver
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TAG="${{ inputs.tag }}"
+          else
+            TAG="${GITHUB_REF##*/}"
+          fi
+          VERSION="${TAG#v}"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Releasing $TAG (version $VERSION)"
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        run: xcodegen generate
+
+      - name: Build Release
+        run: |
+          xcodebuild \
+            -project Hop.xcodeproj \
+            -scheme Hop \
+            -configuration Release \
+            -derivedDataPath build \
+            MARKETING_VERSION="${{ steps.ver.outputs.version }}" \
+            CODE_SIGN_IDENTITY="-" \
+            CODE_SIGNING_REQUIRED=NO \
+            build
+
+      - name: Package zip
+        id: pkg
+        run: |
+          APP_PATH="build/Build/Products/Release/Hop.app"
+          test -d "$APP_PATH" || (echo "App not found at $APP_PATH"; find build -name 'Hop.app' -print; exit 1)
+          ZIP_NAME="Hop-${{ steps.ver.outputs.version }}.zip"
+          ditto -c -k --keepParent "$APP_PATH" "$ZIP_NAME"
+          SHA256=$(shasum -a 256 "$ZIP_NAME" | awk '{print $1}')
+          echo "zip=$ZIP_NAME" >> "$GITHUB_OUTPUT"
+          echo "sha256=$SHA256" >> "$GITHUB_OUTPUT"
+          echo "Built $ZIP_NAME (SHA256: $SHA256)"
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          NOTES_FILE=$(mktemp)
+          cat > "$NOTES_FILE" <<EOF
+          ## Hop ${{ steps.ver.outputs.version }}
+
+          Ad-hoc signed macOS menu bar app.
+
+          ### Install via Homebrew
+
+          \`\`\`
+          brew tap bendns/hop
+          brew install --cask hop
+          \`\`\`
+
+          On first launch, macOS may block the app because it's ad-hoc signed. Right-click \`/Applications/Hop.app\` → Open → Open.
+
+          ### SHA256
+
+          \`\`\`
+          ${{ steps.pkg.outputs.sha256 }}  ${{ steps.pkg.outputs.zip }}
+          \`\`\`
+          EOF
+          gh release create "${{ steps.ver.outputs.tag }}" \
+            --title "Hop ${{ steps.ver.outputs.version }}" \
+            --notes-file "$NOTES_FILE" \
+            "${{ steps.pkg.outputs.zip }}"
+
+      - name: Cask snippet
+        run: |
+          cat <<EOF
+
+          ========================================================
+          Update Casks/hop.rb in bendns/homebrew-hop with:
+
+              version "${{ steps.ver.outputs.version }}"
+              sha256 "${{ steps.pkg.outputs.sha256 }}"
+
+          URL pattern already uses "#{version}" so no change needed.
+          ========================================================
+          EOF
