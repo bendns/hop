@@ -1,5 +1,9 @@
 # Hop!
 
+<p align="center">
+    <img src="assets/hop-cover.png" alt="Hop! banner" />
+</p>
+
 A tiny macOS menu bar app that reminds you to alternate between sitting and standing. Backed by ergonomic research, local-only, no accounts, no telemetry.
 
 ## Features
