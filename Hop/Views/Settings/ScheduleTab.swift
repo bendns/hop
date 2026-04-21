@@ -23,19 +23,32 @@ struct ScheduleTab: View {
                     .foregroundStyle(.secondary)
             }
 
-            Section("Work days") {
+            Section {
                 ForEach(Weekday.allCases) { day in
-                    WorkDayRow(day: day).environmentObject(store)
+                    LabeledContent(day.fullName) {
+                        Picker("", selection: dayModeBinding(for: day)) {
+                            ForEach(DayMode.allCases) { mode in
+                                Text(mode.label).tag(mode)
+                            }
+                        }
+                        .pickerStyle(.segmented)
+                        .labelsHidden()
+                        .frame(minWidth: 200)
+                    }
                 }
+            } header: {
+                Text("Work days")
+            } footer: {
+                Text("**Off** — no reminders · **Home** — reminders fire · **Office** — no reminders (you're away from your desk)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
         }
         .formStyle(.grouped)
     }
 
-    // MARK: - Shared-hour binding
+    // MARK: - Bindings
 
-    /// Reads/writes a time field from Monday's WorkDay (canonical) and mirrors
-    /// the write across every weekday so hours stay consistent.
     private func sharedBinding(_ keyPath: WritableKeyPath<WorkDay, TimeOfDay>) -> Binding<TimeOfDay> {
         Binding(
             get: {
@@ -51,40 +64,44 @@ struct ScheduleTab: View {
             }
         )
     }
+
+    private func dayModeBinding(for day: Weekday) -> Binding<DayMode> {
+        Binding(
+            get: {
+                let wd = store.settings.workHoursByWeekday[day] ?? .defaultOff
+                if !wd.enabled { return .off }
+                return wd.isOfficeDay ? .office : .home
+            },
+            set: { newMode in
+                var wd = store.settings.workHoursByWeekday[day] ?? .defaultOff
+                switch newMode {
+                case .off:
+                    wd.enabled = false
+                    wd.isOfficeDay = false
+                case .home:
+                    wd.enabled = true
+                    wd.isOfficeDay = false
+                case .office:
+                    wd.enabled = true
+                    wd.isOfficeDay = true
+                }
+                store.settings.workHoursByWeekday[day] = wd
+            }
+        )
+    }
 }
 
-// MARK: - Work day row
+// MARK: - Day mode
 
-private struct WorkDayRow: View {
-    @EnvironmentObject var store: SettingsStore
-    let day: Weekday
-
-    var body: some View {
-        let binding = Binding<WorkDay>(
-            get: { store.settings.workHoursByWeekday[day] ?? .defaultOff },
-            set: { store.settings.workHoursByWeekday[day] = $0 }
-        )
-
-        HStack {
-            Toggle(isOn: binding.enabled) {
-                Text(day.fullName)
-                    .font(.body)
-            }
-            .toggleStyle(.switch)
-
-            Spacer()
-
-            if binding.enabled.wrappedValue {
-                Toggle(isOn: binding.isOfficeDay) {
-                    Text("Office day")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                .toggleStyle(.switch)
-                .controlSize(.mini)
-            }
+private enum DayMode: String, CaseIterable, Identifiable, Hashable {
+    case off, home, office
+    var id: String { rawValue }
+    var label: String {
+        switch self {
+        case .off:    return "Off"
+        case .home:   return "Home"
+        case .office: return "Office"
         }
-        .padding(.vertical, HopSpacing.xs)
     }
 }
 
