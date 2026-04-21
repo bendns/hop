@@ -42,7 +42,7 @@ struct MenuPopoverView: View {
             HopWordmark()
             Spacer()
             Button {
-                openWindow(id: "settings")
+                openAppWindow("settings")
             } label: {
                 Image(systemName: "gearshape")
                     .font(.body)
@@ -53,6 +53,14 @@ struct MenuPopoverView: View {
             .buttonStyle(.plain)
             .accessibilityLabel("Open settings")
         }
+    }
+
+    /// Opens a SwiftUI Window and pulls the app to the foreground. Menu-bar-only apps
+    /// (`LSUIElement = true`) don't auto-activate, so newly-opened windows would otherwise
+    /// land behind whatever else is on screen.
+    private func openAppWindow(_ id: String) {
+        openWindow(id: id)
+        NSApp.activate(ignoringOtherApps: true)
     }
 
     // MARK: - State card
@@ -222,9 +230,9 @@ struct MenuPopoverView: View {
 
     private var footer: some View {
         HStack(spacing: HopSpacing.lg) {
-            Button("History") { openWindow(id: "history") }
+            Button("History") { openAppWindow("history") }
                 .accessibilityLabel("Open history")
-            Button("Settings") { openWindow(id: "settings") }
+            Button("Settings") { openAppWindow("settings") }
                 .accessibilityLabel("Open settings")
             Spacer()
             Button("Quit") { NSApplication.shared.terminate(nil) }
