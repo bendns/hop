@@ -7,17 +7,7 @@ struct GeneralTab: View {
     var body: some View {
         Form {
             Section("Mode") {
-                Picker("", selection: presetBinding) {
-                    ForEach(presetModes) { mode in
-                        Text(mode.displayName).tag(Optional(mode))
-                    }
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-
-                Text(previewLine)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                ModePicker(selection: presetBinding)
             }
 
             Section {
@@ -72,9 +62,7 @@ struct GeneralTab: View {
 
     // MARK: - Bindings
 
-    private let presetModes: [Mode] = [.science, .beginner, .intermediate, .advanced]
-
-    /// nil while in custom mode, so no preset segment looks selected.
+    /// nil while in custom mode, so no preset card looks selected.
     private var presetBinding: Binding<Mode?> {
         Binding(
             get: { store.settings.mode == .custom ? nil : store.settings.mode },
@@ -95,16 +83,5 @@ struct GeneralTab: View {
                 }
             }
         )
-    }
-
-    private var previewLine: String {
-        let d = Presets.durations(
-            for: store.settings.mode,
-            custom: Durations(
-                standMinutes: store.settings.customStandMinutes,
-                sitMinutes: store.settings.customSitMinutes
-            )
-        )
-        return "Stand \(d.standMinutes) min · Sit \(d.sitMinutes) min"
     }
 }

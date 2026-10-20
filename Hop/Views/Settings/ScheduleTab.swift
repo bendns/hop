@@ -8,14 +8,14 @@ struct ScheduleTab: View {
             Section("Work hours") {
                 LabeledContent("Hours") {
                     TimeRangePicker(
-                        start: sharedBinding(\.start),
-                        end: sharedBinding(\.end)
+                        start: store.sharedWorkHoursBinding(\.start),
+                        end: store.sharedWorkHoursBinding(\.end)
                     )
                 }
                 LabeledContent("Lunch") {
                     TimeRangePicker(
-                        start: sharedBinding(\.lunchStart),
-                        end: sharedBinding(\.lunchEnd)
+                        start: store.sharedWorkHoursBinding(\.lunchStart),
+                        end: store.sharedWorkHoursBinding(\.lunchEnd)
                     )
                 }
                 Text("Applied to every working day.")
@@ -53,25 +53,6 @@ struct ScheduleTab: View {
     }
 
     // MARK: - Bindings
-
-    private func sharedBinding(_ keyPath: WritableKeyPath<WorkDay, TimeOfDay>) -> Binding<TimeOfDay> {
-        Binding(
-            get: {
-                store.settings.workHoursByWeekday[.monday]?[keyPath: keyPath]
-                    ?? TimeOfDay(hour: 9, minute: 0)
-            },
-            set: { newValue in
-                // Build the whole map first so the store saves and publishes once.
-                var map = store.settings.workHoursByWeekday
-                for day in Weekday.allCases {
-                    var wd = map[day] ?? .defaultOff
-                    wd[keyPath: keyPath] = newValue
-                    map[day] = wd
-                }
-                store.settings.workHoursByWeekday = map
-            }
-        )
-    }
 
     private var hoursWarning: String? {
         guard let day = store.settings.workHoursByWeekday[.monday] else { return nil }
@@ -119,49 +100,5 @@ private enum DayMode: String, CaseIterable, Identifiable, Hashable {
         case .home:   return "Home"
         case .office: return "Office"
         }
-    }
-}
-
-// MARK: - Time range picker
-
-private struct TimeRangePicker: View {
-    @Binding var start: TimeOfDay
-    @Binding var end: TimeOfDay
-
-    var body: some View {
-        HStack(spacing: HopSpacing.sm) {
-            TimeField(value: $start)
-            Text("–").foregroundStyle(.secondary)
-            TimeField(value: $end)
-        }
-    }
-}
-
-private struct TimeField: View {
-    @Binding var value: TimeOfDay
-
-    var body: some View {
-        DatePicker(
-            "",
-            selection: Binding(
-                get: { Self.date(from: value) },
-                set: { value = Self.time(from: $0) }
-            ),
-            displayedComponents: .hourAndMinute
-        )
-        .labelsHidden()
-        .datePickerStyle(.compact)
-    }
-
-    private static func date(from tod: TimeOfDay) -> Date {
-        var c = DateComponents()
-        c.hour = tod.hour
-        c.minute = tod.minute
-        return Calendar.current.date(from: c) ?? Date()
-    }
-
-    private static func time(from date: Date) -> TimeOfDay {
-        let c = Calendar.current.dateComponents([.hour, .minute], from: date)
-        return TimeOfDay(hour: c.hour ?? 0, minute: c.minute ?? 0)
     }
 }

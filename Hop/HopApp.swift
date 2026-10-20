@@ -7,6 +7,11 @@ struct HopApp: App {
     @StateObject private var settings = SettingsStore.shared
     @StateObject private var history = HistoryStore.shared
 
+    init() {
+        // Must run before the scheduler first persists posture, see `Onboarding`.
+        _ = Onboarding.isNeeded
+    }
+
     var body: some Scene {
         MenuBarExtra {
             MenuPopoverView()
@@ -21,18 +26,27 @@ struct HopApp: App {
         }
         .menuBarExtraStyle(.window)
 
-        Window("Settings", id: "settings") {
+        Window("Welcome to Hop!", id: HopWindow.welcome) {
+            WelcomeView()
+                .environmentObject(settings)
+        }
+        .windowResizability(.contentSize)
+        .windowStyle(.hiddenTitleBar)
+        .defaultLaunchBehavior(Onboarding.isNeeded ? .presented : .suppressed)
+        .restorationBehavior(.disabled)
+
+        Window("Settings", id: HopWindow.settings) {
             SettingsView()
                 .environmentObject(settings)
         }
         .defaultSize(width: 540, height: 440)
 
-        Window("History", id: "history") {
+        Window("History", id: HopWindow.history) {
             HistoryView()
                 .environmentObject(history)
                 .environmentObject(settings)
         }
-        .defaultSize(width: 640, height: 480)
+        .defaultSize(width: 720, height: 560)
     }
 
     private func iconName(for status: ScheduleStatus, posture: Posture) -> String {

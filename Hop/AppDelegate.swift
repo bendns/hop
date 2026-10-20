@@ -7,8 +7,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         center.delegate = self
         NotificationManager.shared.registerCategories()
 
-        Task {
-            _ = await NotificationManager.shared.requestAuthorization()
+        // New users are asked from the welcome flow, with context.
+        if !Onboarding.isNeeded {
+            Task {
+                _ = await NotificationManager.shared.requestAuthorization()
+            }
         }
 
         NSWorkspace.shared.notificationCenter.addObserver(

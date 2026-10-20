@@ -7,33 +7,35 @@ struct HistoryView: View {
     @EnvironmentObject private var settings: SettingsStore
     @State private var tab: Tab = .today
     @State private var showResetConfirm = false
-    @State private var now = Date()
-    private let timer = Timer.publish(every: 30, on: .main, in: .common).autoconnect()
 
     enum Tab: String, CaseIterable, Identifiable {
         case today, week
         var id: String { rawValue }
-        var label: String { self == .today ? "Today" : "Week" }
+        var label: String { self == .today ? "Today" : "This Week" }
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: HopSpacing.lg) {
-            Picker("", selection: $tab) {
-                ForEach(Tab.allCases) { Text($0.label).tag($0) }
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .frame(maxWidth: 200)
-
-            chartSection
-
-            Divider()
-
-            summarySection
+        TimelineView(.periodic(from: .now, by: 30)) { context in
+            content(now: context.date)
         }
-        .padding(HopSpacing.xl)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .onReceive(timer) { now = $0 }
+        .frame(minWidth: 640, minHeight: 520)
+        .toolbar {
+            ToolbarItem(placement: .principal) {
+                Picker("Period", selection: $tab) {
+                    ForEach(Tab.allCases) { Text($0.label).tag($0) }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+            }
+            ToolbarItemGroup(placement: .primaryAction) {
+                Button("Export CSV", systemImage: "square.and.arrow.up", action: exportCSV)
+                    .help("Export your history as CSV")
+                Button("Reset History", systemImage: "trash", role: .destructive) {
+                    showResetConfirm = true
+                }
+                .help("Delete all history")
+            }
+        }
         .confirmationDialog(
             "Reset all history?",
             isPresented: $showResetConfirm,
@@ -46,62 +48,118 @@ struct HistoryView: View {
         }
     }
 
-    // MARK: - Chart
+    private func content(now: Date) -> some View {
+        let weekEvents = history.eventsForWeek(now: now)
+        let todaySegments = PostureStats.segments(
+            for: history.eventsForToday(now: now),
+            until: now,
+            settings: settings.settings
+        )
+        let weekDays = WeekChart.days(for: weekEvents, now: now, settings: settings.settings)
 
-    @ViewBuilder private var chartSection: some View {
-        switch tab {
-        case .today:
-            TodayChart(segments: PostureStats.segments(
-                for: history.eventsForToday(now: now),
-                until: now,
-                settings: settings.settings
-            ))
-                .frame(height: 200)
-        case .week:
-            WeekChart(events: history.eventsForWeek(now: now), now: now, settings: settings.settings)
-                .frame(height: 240)
+        return ScrollView {
+            VStack(alignment: .leading, spacing: HopSpacing.lg) {
+                summaryCards(todaySegments: todaySegments, weekDays: weekDays, weekEvents: weekEvents)
+
+                VStack(alignment: .leading, spacing: HopSpacing.md) {
+                    Text(tab == .today ? "Your day" : "Your week")
+                        .font(.headline)
+                    Group {
+                        switch tab {
+                        case .today: TodayChart(segments: todaySegments)
+                        case .week:  WeekChart(days: weekDays)
+                        }
+                    }
+                    .frame(height: 260)
+                }
+                .hopCardStyle(padding: HopSpacing.lg)
+            }
+            .padding(HopSpacing.xl)
         }
     }
 
-    // MARK: - Summary (compliance ring + actions)
+    // MARK: - Summary cards
 
-    private var summarySection: some View {
-        let week = history.eventsForWeek(now: now)
-        let actionable = week.filter { $0.trigger == .notificationAction || $0.trigger == .skipped }
-        let switched = actionable.filter { $0.trigger == .notificationAction }.count
-        let total = actionable.count
-        let pct = total == 0 ? 0 : Double(switched) / Double(total) * 100
+    private func summaryCards(
+        todaySegments: [PostureSegment],
+        weekDays: [WeekChart.DayStat],
+        weekEvents: [PostureEvent]
+    ) -> some View {
+        let standToday = todaySegments
+            .filter { $0.posture == .standing }
+            .reduce(0) { $0 + $1.end.timeIntervalSince($1.start) }
 
-        return HStack(alignment: .center, spacing: HopSpacing.lg) {
-            ComplianceRing(percent: pct)
-                .frame(width: 60, height: 60)
+        let activeDays = weekDays.filter { $0.standingHours + $0.sittingHours > 0 }
+        let averageStand = activeDays.isEmpty
+            ? 0
+            : activeDays.reduce(0) { $0 + $1.standingHours } / Double(activeDays.count) * 3600
 
-            VStack(alignment: .leading, spacing: HopSpacing.xs) {
-                Text("This week")
+        let answered = weekEvents.filter { $0.trigger == .notificationAction || $0.trigger == .skipped }
+        let switched = answered.filter { $0.trigger == .notificationAction }.count
+        let switchRate = answered.isEmpty ? 0 : Double(switched) / Double(answered.count)
+
+        return HStack(spacing: HopSpacing.md) {
+            summaryCard(
+                title: "Standing today",
+                value: HopFormat.duration(standToday),
+                detail: "of \(HopFormat.duration(Presets.dailyStandGoal)) goal",
+                progress: standToday / Presets.dailyStandGoal,
+                systemImage: "figure.stand"
+            )
+            summaryCard(
+                title: "Daily average",
+                value: HopFormat.duration(averageStand),
+                detail: "standing this week",
+                progress: averageStand / Presets.dailyStandGoal,
+                systemImage: "chart.bar.fill"
+            )
+            summaryCard(
+                title: "Switch rate",
+                value: "\(Int((switchRate * 100).rounded()))%",
+                detail: answered.isEmpty ? "no reminders yet" : "\(switched) of \(answered.count) reminders",
+                progress: switchRate,
+                systemImage: "arrow.left.arrow.right"
+            )
+        }
+    }
+
+    private func summaryCard(
+        title: String,
+        value: String,
+        detail: String,
+        progress: Double,
+        systemImage: String
+    ) -> some View {
+        HStack(spacing: HopSpacing.md) {
+            ProgressRing(progress: progress, tint: .accentColor, lineWidth: 5) {
+                Image(systemName: systemImage)
+                    .font(.callout)
+                    .foregroundStyle(Color.accentColor)
+            }
+            .frame(width: 44, height: 44)
+            .accessibilityHidden(true)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
                     .font(.caption.weight(.medium))
                     .foregroundStyle(.secondary)
-                Text("\(switched) of \(total) switched")
-                    .font(.headline)
+                Text(value)
+                    .font(.system(.title2, design: .rounded, weight: .semibold))
                     .monospacedDigit()
+                    .contentTransition(.numericText())
+                Text(detail)
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+                    .lineLimit(1)
             }
-
-            Spacer()
-
-            HStack(spacing: HopSpacing.sm) {
-                Button {
-                    exportCSV()
-                } label: {
-                    Label("Export CSV", systemImage: "square.and.arrow.up")
-                }
-                Button(role: .destructive) {
-                    showResetConfirm = true
-                } label: {
-                    Label("Reset", systemImage: "trash")
-                }
-            }
-            .buttonStyle(.bordered)
+            Spacer(minLength: 0)
         }
+        .frame(maxWidth: .infinity)
+        .hopCardStyle()
+        .accessibilityElement(children: .combine)
     }
+
+    // MARK: - Export
 
     private func exportCSV() {
         let panel = NSSavePanel()
@@ -114,31 +172,5 @@ struct HistoryView: View {
             csv += "\(formatter.string(from: e.timestamp)),\(e.posture.rawValue),\(e.trigger.rawValue)\n"
         }
         try? csv.write(to: url, atomically: true, encoding: .utf8)
-    }
-}
-
-// MARK: - Compliance ring
-
-struct ComplianceRing: View {
-    let percent: Double
-
-    var body: some View {
-        ZStack {
-            Circle()
-                .stroke(.quaternary, lineWidth: 4)
-            Circle()
-                .trim(from: 0, to: max(0.001, min(1, percent / 100)))
-                .stroke(
-                    Color.accentColor,
-                    style: StrokeStyle(lineWidth: 4, lineCap: .round)
-                )
-                .rotationEffect(.degrees(-90))
-                .animation(.easeOut(duration: 0.4), value: percent)
-            Text("\(Int(percent.rounded()))%")
-                .font(.system(.caption, design: .rounded, weight: .semibold))
-                .monospacedDigit()
-        }
-        .accessibilityElement()
-        .accessibilityLabel("Compliance \(Int(percent.rounded())) percent")
     }
 }

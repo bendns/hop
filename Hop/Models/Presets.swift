@@ -17,6 +17,28 @@ enum Mode: String, Codable, CaseIterable, Identifiable {
         case .custom:       return "Custom"
         }
     }
+
+    var systemImage: String {
+        switch self {
+        case .science:      return "flask"
+        case .beginner:     return "leaf"
+        case .intermediate: return "figure.walk"
+        case .advanced:     return "flame"
+        case .custom:       return "slider.horizontal.3"
+        }
+    }
+
+    var blurb: String {
+        switch self {
+        case .science:      return "Research-backed default"
+        case .beginner:     return "Ease into standing"
+        case .intermediate: return "Balanced 1:1 rhythm"
+        case .advanced:     return "More time on your feet"
+        case .custom:       return "Your own durations"
+        }
+    }
+
+    static let presets: [Mode] = [.science, .beginner, .intermediate, .advanced]
 }
 
 struct Durations: Equatable {
@@ -34,6 +56,9 @@ enum Presets {
         case .custom:       return custom
         }
     }
+
+    /// Daily standing target, the middle of the 2–4 h range in the Science tab.
+    static let dailyStandGoal: TimeInterval = 3 * 3600
 
     static let maxContinuousStandMinutes = 45
     static let maxContinuousSitMinutes = 30
