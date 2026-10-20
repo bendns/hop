@@ -26,6 +26,9 @@ final class PostureScheduler: ObservableObject {
     private let defaults: UserDefaults
 
     private var cancellables = Set<AnyCancellable>()
+    /// `status` holds until this moment; `statusTimer` fires then to re-evaluate.
+    private var statusValidUntil: Date?
+    private var statusTimer: Task<Void, Never>?
     private let lastPostureKey = "hop.lastPosture.v1"
     private let lastPostureDateKey = "hop.lastPostureDate.v1"
 
@@ -65,6 +68,7 @@ final class PostureScheduler: ObservableObject {
             persistPosture()
             reschedule()
         case .snooze:
+            guard status == .working else { return }
             scheduleNext(at: clock.now().addingTimeInterval(10 * 60), nextPosture: nextPosture)
         case .skip:
             history.record(PostureEvent(timestamp: clock.now(), posture: currentPosture, trigger: .skipped))
@@ -83,7 +87,16 @@ final class PostureScheduler: ObservableObject {
     }
 
     /// Call on wake from sleep.
-    func handleWake() { reschedule() }
+    func handleWake() { refresh() }
+
+    /// Re-evaluates the schedule without restarting a countdown that is still valid,
+    /// i.e. when no status change happened since it was scheduled.
+    func refresh() {
+        if nextTransitionAt != nil, let until = statusValidUntil, clock.now() < until {
+            return
+        }
+        reschedule()
+    }
 
     // MARK: - Internal
 
@@ -91,12 +104,19 @@ final class PostureScheduler: ObservableObject {
         let now = clock.now()
         status = evaluator.status(at: now, settings: settingsStore.settings)
 
+        statusValidUntil = evaluator.nextStatusChange(after: now, settings: settingsStore.settings)
+        armStatusTimer(now: now)
+
         resetPostureIfNewDay(now: now)
 
         guard status == .working else {
             nextTransitionAt = nil
             notifications.cancelAll()
             return
+        }
+
+        if history.eventsForToday(now: now).isEmpty {
+            history.record(PostureEvent(timestamp: now, posture: currentPosture, trigger: .autoStart))
         }
 
         let durations = Presets.durations(
@@ -111,9 +131,29 @@ final class PostureScheduler: ObservableObject {
         scheduleNext(at: target, nextPosture: currentPosture.toggled)
     }
 
+    /// Schedules the reminder, unless it would land after the current working stretch
+    /// (lunch, end of day, pause, vacation): the status timer takes over from there.
     private func scheduleNext(at date: Date, nextPosture: Posture) {
+        if let until = statusValidUntil, date >= until {
+            nextTransitionAt = nil
+            notifications.cancelAll()
+            return
+        }
         nextTransitionAt = date
         notifications.schedule(nextPosture: nextPosture, fireAt: date)
+    }
+
+    private func armStatusTimer(now: Date) {
+        statusTimer?.cancel()
+        guard let until = statusValidUntil else { return }
+        // One extra second so the evaluator, which works at minute granularity,
+        // sees the new status when the timer fires.
+        let delay = until.timeIntervalSince(now) + 1
+        statusTimer = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(delay))
+            guard !Task.isCancelled else { return }
+            self?.refresh()
+        }
     }
 
     private func observeSettings() {
@@ -132,7 +172,6 @@ final class PostureScheduler: ObservableObject {
         let lastDate = defaults.object(forKey: lastPostureDateKey) as? Date
         if lastDate == nil || !cal.isDate(lastDate!, inSameDayAs: now) {
             currentPosture = .sitting
-            history.record(PostureEvent(timestamp: now, posture: .sitting, trigger: .autoStart))
             persistPosture()
         }
     }

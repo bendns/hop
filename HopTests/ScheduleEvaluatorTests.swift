@@ -94,24 +94,79 @@ final class ScheduleEvaluatorTests: XCTestCase {
         )
     }
 
-    func test_nextWorkingMoment_skipsLunch() {
+    func test_nextStatusChange_morning_isLunchStart() {
+        let morning = date(year: 2026, month: 4, day: 20, hour: 10, minute: 0)
+        XCTAssertEqual(
+            evaluator.nextStatusChange(after: morning, settings: settings),
+            date(year: 2026, month: 4, day: 20, hour: 12, minute: 0)
+        )
+    }
+
+    func test_nextStatusChange_duringLunch_isLunchEnd() {
         let noon = date(year: 2026, month: 4, day: 20, hour: 12, minute: 30)
-        let next = evaluator.nextWorkingMoment(after: noon, settings: settings)
-        XCTAssertNotNil(next)
-        XCTAssertEqual(Calendar.current.component(.hour, from: next!), 13)
+        XCTAssertEqual(
+            evaluator.nextStatusChange(after: noon, settings: settings),
+            date(year: 2026, month: 4, day: 20, hour: 13, minute: 0)
+        )
     }
 
-    func test_nextWorkingMoment_fromSaturday_returnsMonday() {
-        let sat = date(year: 2026, month: 4, day: 25, hour: 10, minute: 0)
-        let next = evaluator.nextWorkingMoment(after: sat, settings: settings)
-        XCTAssertNotNil(next)
-        XCTAssertEqual(Calendar.current.component(.weekday, from: next!), 2) // Monday
-    }
-
-    func test_nextWorkingMoment_fromBeforeWork_returnsStartOfWork() {
+    func test_nextStatusChange_beforeWork_isStartOfWork() {
         let earlyMorning = date(year: 2026, month: 4, day: 20, hour: 7, minute: 0)
-        let next = evaluator.nextWorkingMoment(after: earlyMorning, settings: settings)
-        XCTAssertEqual(Calendar.current.component(.hour, from: next!), 9)
+        XCTAssertEqual(
+            evaluator.nextStatusChange(after: earlyMorning, settings: settings),
+            date(year: 2026, month: 4, day: 20, hour: 9, minute: 0)
+        )
+    }
+
+    func test_nextStatusChange_afterWork_isMidnight() {
+        let evening = date(year: 2026, month: 4, day: 20, hour: 19, minute: 0)
+        XCTAssertEqual(
+            evaluator.nextStatusChange(after: evening, settings: settings),
+            date(year: 2026, month: 4, day: 21, hour: 0, minute: 0)
+        )
+    }
+
+    func test_nextStatusChange_withoutLunch_skipsToEndOfWork() {
+        settings.workHoursByWeekday[.monday]!.lunchEnd = TimeOfDay(hour: 12, minute: 0)
+        let morning = date(year: 2026, month: 4, day: 20, hour: 10, minute: 0)
+        XCTAssertEqual(
+            evaluator.nextStatusChange(after: morning, settings: settings),
+            date(year: 2026, month: 4, day: 20, hour: 18, minute: 0)
+        )
+    }
+
+    func test_nextStatusChange_includesPauseExpiry() {
+        let now = date(year: 2026, month: 4, day: 20, hour: 13, minute: 0)
+        settings.pausedUntil = date(year: 2026, month: 4, day: 20, hour: 15, minute: 30)
+        XCTAssertEqual(evaluator.nextStatusChange(after: now, settings: settings), settings.pausedUntil)
+    }
+
+    func test_wholeDaysVacation_coversLastEvening_andSingleDay() {
+        let range = DateInterval.wholeDays(
+            from: date(year: 2026, month: 4, day: 20, hour: 14, minute: 37),
+            through: date(year: 2026, month: 4, day: 20, hour: 14, minute: 37)
+        )
+        XCTAssertNotNil(range)
+        settings.vacationRanges = [range!]
+        XCTAssertEqual(
+            evaluator.status(at: date(year: 2026, month: 4, day: 20, hour: 9, minute: 0), settings: settings),
+            .onVacation
+        )
+        XCTAssertEqual(
+            evaluator.status(at: date(year: 2026, month: 4, day: 20, hour: 17, minute: 59), settings: settings),
+            .onVacation
+        )
+        XCTAssertEqual(
+            evaluator.status(at: date(year: 2026, month: 4, day: 21, hour: 10, minute: 0), settings: settings),
+            .working
+        )
+    }
+
+    func test_wholeDaysVacation_rejectsReversedRange() {
+        XCTAssertNil(DateInterval.wholeDays(
+            from: date(year: 2026, month: 4, day: 21, hour: 0, minute: 0),
+            through: date(year: 2026, month: 4, day: 20, hour: 0, minute: 0)
+        ))
     }
 
     func test_pausedExpired_noLongerBlocks() {
