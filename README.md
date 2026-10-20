@@ -49,7 +49,7 @@ open Hop.xcodeproj     # then Cmd+R in Xcode
 | `make gen`  | Regenerate `Hop.xcodeproj` from `project.yml`        |
 | `make build`| Compile Debug config via `xcodebuild`                |
 | `make test` | Run the XCTest suite                                 |
-| `make install` | Build + copy to `/Applications/Hop.app`            |
+| `make install` | Build Release + copy to `/Applications/Hop.app`    |
 | `make run`  | `install` then launch                                |
 | `make clean`| Remove generated project + DerivedData               |
 
@@ -64,14 +64,24 @@ When notifications are denied, the popover shows an inline banner with a direct 
 
 ## Why from `/Applications/`?
 
-macOS silently denies notifications for ad-hoc signed apps running from `DerivedData` on recent versions. The `make install` target copies the bundle to `/Applications/` where LaunchServices trusts it and authorization works normally. See the project plan for details.
+macOS silently denies notifications for ad-hoc signed apps running from `DerivedData` on recent versions. The `make install` target copies the bundle to `/Applications/` where LaunchServices trusts it and authorization works normally.
 
 ## Data location
 
 - **Settings**: `UserDefaults` under key `hop.settings.v1`
-- **History**: `~/Library/Application Support/Hop/history.json`
+- **History**: `~/Library/Containers/com.bendns.hopapp/Data/Library/Application Support/Hop/history.json`
 
-Clearing data: remove both (Settings from `defaults delete com.bendns.hopapp hop.settings.v1`) or use **History → Reset** for just the event log.
+Hop runs in the App Sandbox, so both live in its container. On the first sandboxed launch, Hop copies data from earlier, non-sandboxed versions (`~/Library/Application Support/Hop/` and `~/Library/Preferences/com.bendns.hopapp.plist`) into the container; the originals are left untouched and can be deleted afterwards.
+
+Clearing data: remove both (Settings with `defaults delete ~/Library/Containers/com.bendns.hopapp/Data/Library/Preferences/com.bendns.hopapp hop.settings.v1`) or use **History → Reset** for just the event log.
+
+## Verifying a release
+
+Release zips are built by GitHub Actions from the release tag and carry a signed build provenance attestation. Check a download with the GitHub CLI:
+
+```fish
+gh attestation verify Hop-<version>.zip -R bendns/hop
+```
 
 ## Testing
 

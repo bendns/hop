@@ -30,13 +30,25 @@ targets:
     entitlements:
       path: Hop/Hop.entitlements
       properties:
-        com.apple.security.app-sandbox: false
+        com.apple.security.app-sandbox: true
+        # CSV export through NSSavePanel.
+        com.apple.security.files.user-selected.read-write: true
+        # Read-only access to data written by pre-sandbox versions, copied into
+        # the container once by LegacyDataMigration.
+        com.apple.security.temporary-exception.files.home-relative-path.read-only:
+          - /Library/Application Support/Hop/
+          - /Library/Preferences/com.bendns.hopapp.plist
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.bendns.hopapp
         GENERATE_INFOPLIST_FILE: NO
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+      configs:
+        Release:
+          # Ad-hoc signing otherwise adds get-task-allow, letting any local
+          # process attach a debugger despite the hardened runtime.
+          CODE_SIGN_INJECT_BASE_ENTITLEMENTS: NO
   HopTests:
     type: bundle.unit-test
     platform: macOS
