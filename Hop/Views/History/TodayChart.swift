@@ -2,25 +2,7 @@ import SwiftUI
 import Charts
 
 struct TodayChart: View {
-    let events: [PostureEvent]
-    let now: Date
-
-    struct Segment: Identifiable {
-        let id = UUID()
-        let start: Date
-        let end: Date
-        let posture: Posture
-    }
-
-    var segments: [Segment] {
-        let sorted = events.sorted { $0.timestamp < $1.timestamp }
-        var out: [Segment] = []
-        for (i, e) in sorted.enumerated() {
-            let end = i + 1 < sorted.count ? sorted[i + 1].timestamp : now
-            out.append(Segment(start: e.timestamp, end: end, posture: e.posture))
-        }
-        return out
-    }
+    let segments: [PostureSegment]
 
     var body: some View {
         if segments.isEmpty {

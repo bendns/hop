@@ -32,17 +32,8 @@ jobs:
       - name: Generate Xcode project
         run: xcodegen generate
 
-      - name: Build
-        run: |
-          xcodebuild \
-            -project Hop.xcodeproj \
-            -scheme Hop \
-            -configuration Debug \
-            CODE_SIGN_IDENTITY="-" \
-            CODE_SIGNING_REQUIRED=NO \
-            build
-
-      - name: Test
+      # `test` builds the app first, so no separate build step.
+      - name: Build and test
         run: |
           xcodebuild \
             -project Hop.xcodeproj \

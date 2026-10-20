@@ -20,6 +20,11 @@ struct TimeOfDay: Codable, Equatable, Comparable {
     var hour: Int { minutes / 60 }
     var minute: Int { minutes % 60 }
     static func < (lhs: TimeOfDay, rhs: TimeOfDay) -> Bool { lhs.minutes < rhs.minutes }
+
+    /// This time of day on the same calendar day as `day`.
+    func date(on day: Date, calendar: Calendar = .current) -> Date? {
+        calendar.date(bySettingHour: hour, minute: minute, second: 0, of: day)
+    }
 }
 
 struct WorkDay: Codable, Equatable {
@@ -56,7 +61,6 @@ struct Settings: Codable, Equatable {
     var vacationRanges: [DateInterval]
     var pausedUntil: Date?
     var notificationsEnabled: Bool
-    var launchAtLogin: Bool
 
     static let `default`: Settings = {
         var map: [Weekday: WorkDay] = [:]
@@ -70,8 +74,18 @@ struct Settings: Codable, Equatable {
             workHoursByWeekday: map,
             vacationRanges: [],
             pausedUntil: nil,
-            notificationsEnabled: true,
-            launchAtLogin: false
+            notificationsEnabled: true
         )
     }()
+}
+
+extension DateInterval {
+    /// Covers every calendar day from `first` through `last`, both inclusive.
+    /// Returns nil when `last` is before `first`.
+    static func wholeDays(from first: Date, through last: Date, calendar: Calendar = .current) -> DateInterval? {
+        let start = calendar.startOfDay(for: first)
+        guard let end = calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: last)),
+              end > start else { return nil }
+        return DateInterval(start: start, end: end)
+    }
 }

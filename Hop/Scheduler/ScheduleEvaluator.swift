@@ -4,7 +4,6 @@ enum ScheduleStatus: Equatable {
     case working
     case outsideWorkHours
     case onLunchBreak
-    case weekend
     case officeDay
     case onVacation
     case paused
@@ -36,19 +35,32 @@ struct ScheduleEvaluator {
         return .working
     }
 
-    func isWorking(at date: Date, settings: Settings) -> Bool {
-        status(at: date, settings: settings) == .working
-    }
+    /// Returns the first moment after `date` at which `status` differs from its value
+    /// at `date`. Falls back to the next midnight, so callers re-evaluate at least daily.
+    func nextStatusChange(after date: Date, settings: Settings) -> Date {
+        let dayStart = calendar.startOfDay(for: date)
+        let midnight = calendar.date(byAdding: .day, value: 1, to: dayStart)!
 
-    /// Returns the next `Date` where status becomes `.working`, searching forward
-    /// up to 14 days at minute granularity. Returns nil if none found.
-    func nextWorkingMoment(after date: Date, settings: Settings) -> Date? {
-        var cursor = date
-        let horizon = calendar.date(byAdding: .day, value: 14, to: date)!
-        while cursor < horizon {
-            if isWorking(at: cursor, settings: settings) { return cursor }
-            cursor = cursor.addingTimeInterval(60)
+        var candidates: [Date] = []
+        if let weekday = Weekday(rawValue: calendar.component(.weekday, from: date)),
+           let day = settings.workHoursByWeekday[weekday] {
+            for time in [day.start, day.lunchStart, day.lunchEnd, day.end] {
+                if let moment = time.date(on: dayStart, calendar: calendar) {
+                    candidates.append(moment)
+                }
+            }
         }
-        return nil
+        if let until = settings.pausedUntil {
+            candidates.append(until)
+        }
+        for range in settings.vacationRanges {
+            candidates += [range.start, range.end]
+        }
+
+        let current = status(at: date, settings: settings)
+        return candidates
+            .filter { $0 > date && $0 < midnight }
+            .sorted()
+            .first { status(at: $0, settings: settings) != current } ?? midnight
     }
 }

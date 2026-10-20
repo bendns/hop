@@ -23,9 +23,7 @@ final class HistoryStoreTests: XCTestCase {
     func test_persistsAcrossInstances() {
         let store1 = HistoryStore(fileURL: tmpURL)
         store1.record(PostureEvent(posture: .standing, trigger: .manual))
-        let exp = expectation(description: "flush")
-        DispatchQueue.global().asyncAfter(deadline: .now() + 0.2) { exp.fulfill() }
-        wait(for: [exp], timeout: 1.0)
+        store1.flush()
 
         let store2 = HistoryStore(fileURL: tmpURL)
         XCTAssertEqual(store2.events.count, 1)

@@ -19,6 +19,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         )
     }
 
+    func applicationWillTerminate(_ notification: Notification) {
+        HistoryStore.shared.flush()
+    }
+
     @objc private func didWake() {
         Task { @MainActor in PostureScheduler.shared.handleWake() }
     }

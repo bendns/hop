@@ -21,6 +21,11 @@ struct ScheduleTab: View {
                 Text("Applied to every working day.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                if let warning = hoursWarning {
+                    Label(warning, systemImage: "exclamationmark.triangle")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                }
             }
 
             Section {
@@ -56,13 +61,25 @@ struct ScheduleTab: View {
                     ?? TimeOfDay(hour: 9, minute: 0)
             },
             set: { newValue in
+                // Build the whole map first so the store saves and publishes once.
+                var map = store.settings.workHoursByWeekday
                 for day in Weekday.allCases {
-                    var wd = store.settings.workHoursByWeekday[day] ?? .defaultOff
+                    var wd = map[day] ?? .defaultOff
                     wd[keyPath: keyPath] = newValue
-                    store.settings.workHoursByWeekday[day] = wd
+                    map[day] = wd
                 }
+                store.settings.workHoursByWeekday = map
             }
         )
+    }
+
+    private var hoursWarning: String? {
+        guard let day = store.settings.workHoursByWeekday[.monday] else { return nil }
+        if day.end <= day.start { return "Work hours end before they start." }
+        if day.lunchEnd < day.lunchStart || day.lunchStart < day.start || day.lunchEnd > day.end {
+            return "Lunch should fall within work hours."
+        }
+        return nil
     }
 
     private func dayModeBinding(for day: Weekday) -> Binding<DayMode> {

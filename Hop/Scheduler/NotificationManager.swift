@@ -20,7 +20,9 @@ final class NotificationManager: NotificationScheduling, @unchecked Sendable {
     nonisolated(unsafe) static let shared = NotificationManager()
 
     private let center = UNUserNotificationCenter.current()
-    private let identifierPrefix = "hop.notification."
+    /// Hop keeps at most one reminder around, so a fixed identifier makes each
+    /// new request replace the previous one.
+    private let identifier = "hop.notification.next"
 
     func registerCategories() {
         let switched = UNNotificationAction(
@@ -49,7 +51,7 @@ final class NotificationManager: NotificationScheduling, @unchecked Sendable {
 
     func requestAuthorization() async -> Bool {
         do {
-            return try await center.requestAuthorization(options: [.alert, .sound, .badge])
+            return try await center.requestAuthorization(options: [.alert, .sound])
         } catch {
             return false
         }
@@ -60,7 +62,7 @@ final class NotificationManager: NotificationScheduling, @unchecked Sendable {
     }
 
     /// Schedules exactly one posture-switch notification at `fireAt`.
-    /// Replaces any previously-scheduled notification.
+    /// Replaces any previously-scheduled or delivered notification.
     func schedule(nextPosture: Posture, fireAt: Date) {
         cancelAll()
         let content = UNMutableNotificationContent()
@@ -79,14 +81,17 @@ final class NotificationManager: NotificationScheduling, @unchecked Sendable {
         let interval = max(fireAt.timeIntervalSinceNow, 1)
         let trigger = UNTimeIntervalNotificationTrigger(timeInterval: interval, repeats: false)
         let request = UNNotificationRequest(
-            identifier: "\(identifierPrefix)\(UUID().uuidString)",
+            identifier: identifier,
             content: content,
             trigger: trigger
         )
         center.add(request)
     }
 
+    /// Also removes delivered notifications: acting on a stale banner would
+    /// otherwise flip the posture to an outdated target.
     func cancelAll() {
         center.removeAllPendingNotificationRequests()
+        center.removeAllDeliveredNotifications()
     }
 }

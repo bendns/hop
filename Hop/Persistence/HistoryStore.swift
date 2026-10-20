@@ -50,6 +50,11 @@ final class HistoryStore: ObservableObject {
         persist()
     }
 
+    /// Blocks until queued writes hit the disk.
+    func flush() {
+        queue.sync {}
+    }
+
     private func load() {
         guard let data = try? Data(contentsOf: fileURL) else { return }
         if let decoded = try? JSONDecoder().decode([PostureEvent].self, from: data) {

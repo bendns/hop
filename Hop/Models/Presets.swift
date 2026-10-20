@@ -35,7 +35,7 @@ enum Presets {
         }
     }
 
-    static let maxContinuousStandMinutes = 90
+    static let maxContinuousStandMinutes = 45
     static let maxContinuousSitMinutes = 30
     static let customStandRange = 5...90
     static let customSitRange = 5...60
