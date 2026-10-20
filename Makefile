@@ -2,7 +2,8 @@
 
 DERIVED := build
 APP_NAME := Hop.app
-BUILT_APP := $(DERIVED)/Build/Products/Debug/$(APP_NAME)
+# Installed copies are Release builds: Debug carries get-task-allow.
+BUILT_APP := $(DERIVED)/Build/Products/Release/$(APP_NAME)
 INSTALL_DIR := /Applications
 
 gen:
@@ -14,7 +15,8 @@ build: gen
 test: gen
 	xcodebuild -project Hop.xcodeproj -scheme Hop -derivedDataPath $(DERIVED) test
 
-install: build
+install: gen
+	xcodebuild -project Hop.xcodeproj -scheme Hop -configuration Release -derivedDataPath $(DERIVED) build
 	@killall Hop 2>/dev/null || true
 	@test -d "$(BUILT_APP)" || (echo "Built app not found at $(BUILT_APP)"; exit 1)
 	rm -rf $(INSTALL_DIR)/$(APP_NAME)

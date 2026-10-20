@@ -16,20 +16,25 @@ final class HistoryStore: ObservableObject {
     private let queue = DispatchQueue(label: "com.bendns.hop.history", qos: .utility)
 
     init(fileURL: URL? = nil, now: Date = Date()) {
-        if let override = fileURL {
-            self.fileURL = override
-        } else {
-            let base = try! FileManager.default.url(
-                for: .applicationSupportDirectory,
-                in: .userDomainMask,
-                appropriateFor: nil,
-                create: true
-            ).appendingPathComponent("Hop", isDirectory: true)
-            try? FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
-            self.fileURL = base.appendingPathComponent("history.json")
-        }
+        self.fileURL = fileURL ?? Self.defaultFileURL()
+        try? FileManager.default.createDirectory(
+            at: self.fileURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
         load()
         prune(now: now)
+    }
+
+    /// `Application Support/Hop/history.json`, inside the sandbox container.
+    nonisolated static func defaultFileURL() -> URL {
+        try! FileManager.default.url(
+            for: .applicationSupportDirectory,
+            in: .userDomainMask,
+            appropriateFor: nil,
+            create: true
+        )
+        .appendingPathComponent("Hop", isDirectory: true)
+        .appendingPathComponent("history.json")
     }
 
     func record(_ event: PostureEvent) {

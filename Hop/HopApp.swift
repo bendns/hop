@@ -8,7 +8,12 @@ struct HopApp: App {
     @StateObject private var history = HistoryStore.shared
 
     init() {
-        // Must run before the scheduler first persists posture, see `Onboarding`.
+        // Both must run before any store loads or the scheduler persists posture.
+        // Unit tests launch the app as their host; they must not consume the
+        // one-time migration of the developer's real data.
+        if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil {
+            LegacyDataMigration.runIfNeeded()
+        }
         _ = Onboarding.isNeeded
     }
 
