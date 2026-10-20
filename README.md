@@ -21,6 +21,14 @@ A tiny macOS menu bar app that reminds you to alternate between sitting and stan
 - **Launch at login** via `SMAppService`.
 - **Survives sleep/wake** — wall-clock based scheduling; recomputes on wake.
 
+## Install
+
+```fish
+brew install --cask bendns/hop/hop-app
+```
+
+Requires macOS 26 or later. The cask is named `hop-app` because `hop` in Homebrew's official catalog is an unrelated app, which takes precedence over taps, so always use the full name. Hop is ad-hoc signed: on first launch, right-click `/Applications/Hop.app` → **Open** → **Open**. To check a downloaded zip, see [Verifying a release](#verifying-a-release).
+
 ## Requirements
 
 - macOS 26 Tahoe or later
@@ -109,6 +117,4 @@ Personal project. No license declared yet.
 
 ## Contributing / Distribution
 
-Currently a personal MVP, not published to Homebrew. Future packaging aims for:
-- Developer ID signed + notarized `.dmg` for zero-Gatekeeper-friction installs
-- Homebrew cask formula
+Personal project, distributed through GitHub Releases and the `bendns/hop` Homebrew tap. Future packaging aims for a Developer ID signed + notarized build, so Gatekeeper accepts Hop without the right-click step.
