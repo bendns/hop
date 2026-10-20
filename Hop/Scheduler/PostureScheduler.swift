@@ -16,6 +16,8 @@ final class PostureScheduler: ObservableObject {
 
     @Published private(set) var currentPosture: Posture = .sitting
     @Published private(set) var nextTransitionAt: Date?
+    /// When the countdown to `nextTransitionAt` started, for progress display.
+    @Published private(set) var transitionStartedAt: Date?
     @Published private(set) var status: ScheduleStatus = .outsideWorkHours
 
     private let settingsStore: SettingsStore
@@ -27,7 +29,7 @@ final class PostureScheduler: ObservableObject {
 
     private var cancellables = Set<AnyCancellable>()
     /// `status` holds until this moment; `statusTimer` fires then to re-evaluate.
-    private var statusValidUntil: Date?
+    @Published private(set) var statusValidUntil: Date?
     private var statusTimer: Task<Void, Never>?
     private let lastPostureKey = "hop.lastPosture.v1"
     private let lastPostureDateKey = "hop.lastPostureDate.v1"
@@ -140,6 +142,7 @@ final class PostureScheduler: ObservableObject {
             return
         }
         nextTransitionAt = date
+        transitionStartedAt = clock.now()
         notifications.schedule(nextPosture: nextPosture, fireAt: date)
     }
 

@@ -17,7 +17,7 @@ protocol NotificationScheduling: Sendable {
 }
 
 final class NotificationManager: NotificationScheduling, @unchecked Sendable {
-    nonisolated(unsafe) static let shared = NotificationManager()
+    static let shared = NotificationManager()
 
     private let center = UNUserNotificationCenter.current()
     /// Hop keeps at most one reminder around, so a fixed identifier makes each
@@ -27,7 +27,7 @@ final class NotificationManager: NotificationScheduling, @unchecked Sendable {
     func registerCategories() {
         let switched = UNNotificationAction(
             identifier: NotificationAction.switched.rawValue,
-            title: "Switched",
+            title: "Done, switched",
             options: []
         )
         let snooze = UNNotificationAction(
@@ -37,7 +37,7 @@ final class NotificationManager: NotificationScheduling, @unchecked Sendable {
         )
         let skip = UNNotificationAction(
             identifier: NotificationAction.skip.rawValue,
-            title: "Skip this one",
+            title: "Skip this round",
             options: [.destructive]
         )
         let category = UNNotificationCategory(
@@ -66,14 +66,9 @@ final class NotificationManager: NotificationScheduling, @unchecked Sendable {
     func schedule(nextPosture: Posture, fireAt: Date) {
         cancelAll()
         let content = UNMutableNotificationContent()
-        switch nextPosture {
-        case .standing:
-            content.title = "Time to stand up"
-            content.body = "You've been sitting for a while."
-        case .sitting:
-            content.title = "Time to sit down"
-            content.body = "Nice standing streak. Time for a break."
-        }
+        let message = Self.messages[nextPosture]!.randomElement()!
+        content.title = message.title
+        content.body = message.body
         content.sound = .default
         content.categoryIdentifier = NotificationCategory.postureSwitch.rawValue
         content.userInfo = ["nextPosture": nextPosture.rawValue]
@@ -90,6 +85,20 @@ final class NotificationManager: NotificationScheduling, @unchecked Sendable {
 
     /// Also removes delivered notifications: acting on a stale banner would
     /// otherwise flip the posture to an outdated target.
+    /// A few variations so reminders don't feel robotic.
+    private static let messages: [Posture: [(title: String, body: String)]] = [
+        .standing: [
+            ("Time to stand up", "Raise the desk and give your back a break."),
+            ("Up you hop!", "A little standing goes a long way."),
+            ("Stretch your legs", "You've been sitting for a while. Let's switch."),
+        ],
+        .sitting: [
+            ("Time to sit down", "Nice standing streak. Rest your legs for a bit."),
+            ("Take a seat", "Good work on your feet. Time to switch."),
+            ("Rest those legs", "Lower the desk and settle in."),
+        ],
+    ]
+
     func cancelAll() {
         center.removeAllPendingNotificationRequests()
         center.removeAllDeliveredNotifications()

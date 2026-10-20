@@ -9,32 +9,30 @@ struct MenuPopoverView: View {
     @Environment(\.openWindow) private var openWindow
 
     @State private var authStatus: UNAuthorizationStatus = .notDetermined
-    @State private var cardPulse: CGFloat = 1.0
 
-    private var isStanding: Bool { scheduler.currentPosture == .standing }
+    private var posture: Posture { scheduler.currentPosture }
+    private var isWorking: Bool { scheduler.status == .working }
     private var isPaused: Bool { scheduler.status == .paused }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: HopSpacing.lg) {
+        VStack(spacing: HopSpacing.lg) {
+            header
             if authStatus == .denied {
                 permissionBanner
             }
-            header
             // Only the time-dependent parts re-render every second.
             TimelineView(.periodic(from: .now, by: 1)) { context in
-                stateCard(now: context.date)
+                hero(now: context.date)
             }
-            primaryAction
-            secondaryActions
+            actions
             TimelineView(.periodic(from: .now, by: 1)) { context in
-                statsStrip(now: context.date)
+                goalCard(now: context.date)
             }
             footer
         }
         .padding(HopSpacing.lg)
         .frame(width: HopLayout.popoverWidth)
         .task { await refreshAuthStatus() }
-        .onChange(of: scheduler.currentPosture) { _ in pulse() }
     }
 
     // MARK: - Header
@@ -44,210 +42,192 @@ struct MenuPopoverView: View {
             HopWordmark()
             Spacer()
             Button {
-                openAppWindow("settings")
+                HopWindow.open(HopWindow.settings, using: openWindow)
             } label: {
                 Image(systemName: "gearshape")
-                    .font(.body)
-                    .foregroundStyle(.secondary)
-                    .contentShape(Rectangle())
-                    .frame(width: 28, height: 28)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.glass)
+            .buttonBorderShape(.circle)
+            .help("Settings")
             .accessibilityLabel("Open settings")
         }
     }
 
-    /// Opens a SwiftUI Window and pulls the app to the foreground. Menu-bar-only apps
-    /// (`LSUIElement = true`) don't auto-activate, so newly-opened windows would otherwise
-    /// land behind whatever else is on screen.
-    private func openAppWindow(_ id: String) {
-        openWindow(id: id)
-        NSApp.activate(ignoringOtherApps: true)
-    }
+    // MARK: - Hero
 
-    // MARK: - State card
-
-    private func stateCard(now: Date) -> some View {
-        VStack(spacing: HopSpacing.sm) {
-            Image(systemName: postureIconName)
-                .font(.system(size: HopLayout.stateIconSize, weight: .regular))
-                .symbolRenderingMode(.hierarchical)
-                .foregroundStyle(isStanding ? Color.accentColor : Color.secondary)
-                .contentTransition(.opacity)
-                .animation(.easeInOut(duration: 0.25), value: postureIconName)
-                .accessibilityHidden(true)
+    private func hero(now: Date) -> some View {
+        VStack(spacing: HopSpacing.md) {
+            ProgressRing(progress: progress(now: now), tint: isWorking ? posture.tint : .secondary.opacity(0.4)) {
+                Image(systemName: isWorking ? posture.systemImage : "moon.zzz")
+                    .font(.system(size: HopLayout.stateIconSize, weight: .medium))
+                    .symbolRenderingMode(.hierarchical)
+                    .foregroundStyle(isWorking ? posture.tint : .secondary)
+                    .contentTransition(.symbolEffect(.replace))
+                    .symbolEffect(.bounce, value: posture)
+            }
+            .frame(width: HopLayout.ringSize, height: HopLayout.ringSize)
+            .accessibilityHidden(true)
 
             VStack(spacing: HopSpacing.xs) {
-                Text(isStanding ? "Standing" : "Sitting")
-                    .font(.title2.weight(.semibold))
-                countdownLine(now: now)
+                Text(posture.label)
+                    .font(.system(.title2, design: .rounded, weight: .semibold))
+                    .contentTransition(.numericText())
+                Text(subtitle(now: now))
+                    .font(.callout)
+                    .monospacedDigit()
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .contentTransition(.numericText(countsDown: true))
             }
         }
         .frame(maxWidth: .infinity)
-        .frame(height: HopLayout.stateCardHeight)
-        .padding(.horizontal, HopSpacing.md)
-        .background(
-            RoundedRectangle(cornerRadius: HopRadius.container, style: .continuous)
-                .fill(.quaternary)
-        )
-        .scaleEffect(cardPulse)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel(stateCardAccessibility(now: now))
+        .accessibilityLabel(accessibilitySummary(now: now))
     }
 
-    private func countdownLine(now: Date) -> some View {
-        Group {
-            if scheduler.status != .working {
-                Text(statusLabel)
-                    .font(.caption.weight(.medium))
-                    .foregroundStyle(.secondary)
-            } else if let next = scheduler.nextTransitionAt {
-                let remaining = max(0, next.timeIntervalSince(now))
-                Text("in \(format(remaining))")
-                    .font(.body)
-                    .monospacedDigit()
-                    .foregroundStyle(.secondary)
-            } else {
-                Text("—")
-                    .font(.body)
-                    .foregroundStyle(.secondary)
-            }
-        }
+    /// Share of the current interval already elapsed; full when not counting down.
+    private func progress(now: Date) -> Double {
+        guard isWorking,
+              let start = scheduler.transitionStartedAt,
+              let end = scheduler.nextTransitionAt,
+              end > start else { return 1 }
+        return now.timeIntervalSince(start) / end.timeIntervalSince(start)
     }
 
-    private var postureIconName: String {
-        isStanding ? "figure.stand" : "figure.seated.side"
-    }
-
-    private var statusLabel: String {
+    private func subtitle(now: Date) -> String {
+        let until = scheduler.statusValidUntil
         switch scheduler.status {
-        case .working:            return ""
-        case .onLunchBreak:       return "Lunch break"
-        case .outsideWorkHours:   return "Outside work hours"
-        case .disabled:           return "Day off"
-        case .officeDay:          return "Office day"
-        case .onVacation:         return "On vacation"
-        case .paused:             return "Paused for today"
-        case .notificationsOff:   return "Notifications off"
-        }
-    }
-
-    private func stateCardAccessibility(now: Date) -> String {
-        let posture = isStanding ? "standing" : "sitting"
-        if scheduler.status == .working, let next = scheduler.nextTransitionAt {
-            let remaining = max(0, Int(next.timeIntervalSince(now)) / 60)
-            return "Currently \(posture). Next switch in \(remaining) minutes."
-        }
-        return "Currently \(posture). \(statusLabel)"
-    }
-
-    // MARK: - Primary action
-
-    private var primaryAction: some View {
-        Button {
-            scheduler.markManualTransition(to: scheduler.currentPosture.toggled)
-        } label: {
-            HStack(spacing: HopSpacing.sm) {
-                Image(systemName: isStanding ? "figure.seated.side" : "figure.stand")
-                Text(isStanding ? "I'm sitting now" : "I'm standing now")
-                    .fontWeight(.medium)
+        case .working:
+            if let next = scheduler.nextTransitionAt {
+                let remaining = next.timeIntervalSince(now)
+                if remaining <= 0 { return posture == .sitting ? "Time to stand up" : "Time to sit down" }
+                let verb = posture == .sitting ? "Stand up" : "Sit down"
+                return "\(verb) in \(HopFormat.countdown(remaining))"
             }
-            .frame(maxWidth: .infinity)
+            if let until { return "No more reminders before \(HopFormat.time(until))" }
+            return "No reminder scheduled"
+        case .onLunchBreak:
+            if let until { return "Enjoy lunch · back at \(HopFormat.time(until))" }
+            return "Enjoy lunch"
+        case .outsideWorkHours:
+            // A status change before midnight means the workday hasn't started yet.
+            if let until, until != Calendar.current.startOfDay(for: until) {
+                return "Your day starts at \(HopFormat.time(until))"
+            }
+            return "Done for today. See you tomorrow!"
+        case .disabled:         return "Day off, enjoy it"
+        case .officeDay:        return "Office day · no reminders"
+        case .onVacation:       return "Enjoy your time off"
+        case .paused:           return "Paused until tomorrow"
+        case .notificationsOff: return "Reminders are turned off"
         }
-        .buttonStyle(.borderedProminent)
-        .controlSize(.large)
-        .keyboardShortcut(.defaultAction)
-        .accessibilityLabel(isStanding ? "Mark sitting" : "Mark standing")
     }
 
-    // MARK: - Secondary actions
+    private func accessibilitySummary(now: Date) -> String {
+        "Currently \(posture.label.lowercased()). \(subtitle(now: now))"
+    }
 
-    private var secondaryActions: some View {
-        HStack(spacing: HopSpacing.sm) {
-            Group {
-                secondaryButton(
-                    label: "Snooze 10m",
-                    systemImage: "alarm",
-                    action: {
-                        scheduler.handleNotificationAction(.snooze, nextPosture: scheduler.currentPosture.toggled)
-                    }
-                )
-                secondaryButton(
-                    label: "Skip",
-                    systemImage: "forward",
-                    action: {
-                        scheduler.handleNotificationAction(.skip, nextPosture: scheduler.currentPosture.toggled)
-                    }
-                )
-            }
-            .disabled(scheduler.status != .working)
-            secondaryButton(
-                label: isPaused ? "Resume" : "Pause today",
-                systemImage: isPaused ? "play.circle" : "pause.circle",
-                action: {
-                    isPaused ? scheduler.clearPause() : scheduler.pauseForToday()
+    // MARK: - Actions
+
+    private var actions: some View {
+        GlassEffectContainer(spacing: HopSpacing.sm) {
+            VStack(spacing: HopSpacing.sm) {
+                Button {
+                    scheduler.markManualTransition(to: posture.toggled)
+                } label: {
+                    Label(
+                        posture == .standing ? "I'm sitting now" : "I'm standing now",
+                        systemImage: posture.toggled.systemImage
+                    )
+                    .fontWeight(.semibold)
+                    .frame(maxWidth: .infinity)
                 }
-            )
-        }
-    }
+                .buttonStyle(.glassProminent)
+                .controlSize(.extraLarge)
+                .keyboardShortcut(.defaultAction)
 
-    private func secondaryButton(label: String, systemImage: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            VStack(spacing: HopSpacing.xs) {
-                Image(systemName: systemImage).font(.body)
-                Text(label).font(.caption)
+                HStack(spacing: HopSpacing.sm) {
+                    Group {
+                        secondaryButton("Snooze", systemImage: "alarm", help: "Remind me in 10 minutes") {
+                            scheduler.handleNotificationAction(.snooze, nextPosture: posture.toggled)
+                        }
+                        secondaryButton("Skip", systemImage: "forward", help: "Stay put for another round") {
+                            scheduler.handleNotificationAction(.skip, nextPosture: posture.toggled)
+                        }
+                    }
+                    .disabled(!isWorking)
+
+                    secondaryButton(
+                        isPaused ? "Resume" : "Pause",
+                        systemImage: isPaused ? "play" : "pause",
+                        help: isPaused ? "Resume reminders" : "Pause reminders until tomorrow"
+                    ) {
+                        isPaused ? scheduler.clearPause() : scheduler.pauseForToday()
+                    }
+                }
             }
-            .frame(maxWidth: .infinity, minHeight: 36)
         }
-        .buttonStyle(.bordered)
-        .controlSize(.regular)
-        .accessibilityLabel(label)
     }
 
-    // MARK: - Stats strip
+    private func secondaryButton(
+        _ title: String,
+        systemImage: String,
+        help: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Label(title, systemImage: systemImage)
+                .font(.callout)
+                .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.glass)
+        .controlSize(.large)
+        .help(help)
+    }
 
-    private func statsStrip(now: Date) -> some View {
+    // MARK: - Goal card
+
+    private func goalCard(now: Date) -> some View {
         let totals = PostureStats.totals(
             for: history.eventsForToday(now: now),
             until: now,
             settings: settings.settings
         )
-        return HStack(spacing: HopSpacing.xl) {
-            statCell(systemImage: "figure.stand", label: "Standing", value: format(totals.stand))
-            Divider().frame(height: 28)
-            statCell(systemImage: "figure.seated.side", label: "Sitting", value: format(totals.sit))
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    private func statCell(systemImage: String, label: String, value: String) -> some View {
-        VStack(alignment: .leading, spacing: HopSpacing.xs) {
-            Label(label, systemImage: systemImage)
-                .font(.caption.weight(.medium))
-                .foregroundStyle(.secondary)
-            Text(value)
-                .font(.headline)
+        let reached = totals.stand >= Presets.dailyStandGoal
+        return VStack(alignment: .leading, spacing: HopSpacing.sm) {
+            HStack(alignment: .firstTextBaseline) {
+                Label(reached ? "Goal reached" : "Standing today", systemImage: reached ? "checkmark.seal.fill" : "figure.stand")
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(reached ? Color.accentColor : .primary)
+                Spacer()
+                Text("\(HopFormat.duration(totals.stand)) of \(HopFormat.duration(Presets.dailyStandGoal))")
+                    .font(.subheadline)
+                    .monospacedDigit()
+                    .foregroundStyle(.secondary)
+            }
+            ProgressView(value: min(1, totals.stand / Presets.dailyStandGoal))
+                .tint(.accentColor)
+            Text("Sitting \(HopFormat.duration(totals.sit))")
+                .font(.caption)
                 .monospacedDigit()
+                .foregroundStyle(.secondary)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .hopCardStyle()
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(label): \(value)")
     }
 
     // MARK: - Footer
 
     private var footer: some View {
         HStack(spacing: HopSpacing.lg) {
-            Button("History") { openAppWindow("history") }
-                .accessibilityLabel("Open history")
-            Button("Settings") { openAppWindow("settings") }
-                .accessibilityLabel("Open settings")
+            Button("History") { HopWindow.open(HopWindow.history, using: openWindow) }
+            Button("Settings") { HopWindow.open(HopWindow.settings, using: openWindow) }
             Spacer()
             Button("Quit") { NSApplication.shared.terminate(nil) }
                 .accessibilityLabel("Quit Hop")
         }
         .buttonStyle(.link)
-        .font(.caption)
+        .font(.callout)
         .foregroundStyle(.secondary)
     }
 
@@ -255,21 +235,24 @@ struct MenuPopoverView: View {
 
     private var permissionBanner: some View {
         HStack(spacing: HopSpacing.md) {
-            Image(systemName: "bell.slash")
-                .foregroundStyle(Color.accentColor)
-                .font(.body)
-            VStack(alignment: .leading, spacing: HopSpacing.xs) {
+            Image(systemName: "bell.slash.fill")
+                .foregroundStyle(.orange)
+            VStack(alignment: .leading, spacing: 2) {
                 Text("Notifications are off")
-                    .font(.caption.weight(.medium))
-                Button("Open System Settings") {
-                    if let url = URL(string: "x-apple.systempreferences:com.apple.preference.notifications") {
-                        NSWorkspace.shared.open(url)
-                    }
-                }
-                .buttonStyle(.link)
-                .font(.caption)
+                    .font(.callout.weight(.medium))
+                Text("Hop can't remind you to switch.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
             Spacer()
+            Button("Fix") {
+                if let url = URL(string: "x-apple.systempreferences:com.apple.preference.notifications") {
+                    NSWorkspace.shared.open(url)
+                }
+            }
+            .buttonStyle(.glass)
+            .controlSize(.small)
+            .accessibilityLabel("Open notification settings")
         }
         .hopInlineBannerStyle()
     }
@@ -278,20 +261,5 @@ struct MenuPopoverView: View {
 
     private func refreshAuthStatus() async {
         authStatus = await NotificationManager.shared.authorizationStatus()
-    }
-
-    private func pulse() {
-        withAnimation(.easeInOut(duration: 0.12)) { cardPulse = 1.04 }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
-            withAnimation(.easeInOut(duration: 0.12)) { cardPulse = 1.0 }
-        }
-    }
-
-    private func format(_ seconds: TimeInterval) -> String {
-        let total = Int(seconds)
-        let h = total / 3600
-        let m = (total % 3600) / 60
-        let s = total % 60
-        return h > 0 ? String(format: "%dh %02dm", h, m) : String(format: "%02d:%02d", m, s)
     }
 }
