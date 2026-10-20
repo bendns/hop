@@ -23,7 +23,7 @@ A tiny macOS menu bar app that reminds you to alternate between sitting and stan
 
 ## Requirements
 
-- macOS 13 Ventura or later
+- macOS 26 Tahoe or later
 - Xcode 15 or later with Swift 6 toolchain
 - [XcodeGen](https://github.com/yonaskolb/XcodeGen) (for project generation)
 
