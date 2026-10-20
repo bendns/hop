@@ -24,7 +24,8 @@ struct VacationsTab: View {
                             .buttonStyle(.borderless)
                             .accessibilityLabel("Remove vacation")
                         } label: {
-                            Text("\(range.start.formatted(date: .abbreviated, time: .omitted)) → \(range.end.formatted(date: .abbreviated, time: .omitted))")
+                            // `end` is the midnight after the last day off.
+                            Text("\(range.start.formatted(date: .abbreviated, time: .omitted)) → \(range.end.addingTimeInterval(-1).formatted(date: .abbreviated, time: .omitted))")
                                 .font(.body)
                         }
                     }
@@ -43,13 +44,17 @@ struct VacationsTab: View {
                 HStack {
                     Spacer()
                     Button("Add vacation") {
-                        guard newEnd > newStart else { return }
-                        store.settings.vacationRanges.append(DateInterval(start: newStart, end: newEnd))
+                        guard let range = newRange else { return }
+                        store.settings.vacationRanges.append(range)
                     }
-                    .disabled(newEnd <= newStart)
+                    .disabled(newRange == nil)
                 }
             }
         }
         .formStyle(.grouped)
+    }
+
+    private var newRange: DateInterval? {
+        DateInterval.wholeDays(from: newStart, through: newEnd)
     }
 }

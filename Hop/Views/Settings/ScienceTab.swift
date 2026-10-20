@@ -42,7 +42,7 @@ struct ScienceTab: View {
             VStack(alignment: .leading, spacing: HopSpacing.xs) {
                 bulletRow("Beginner (15 stand / 45 sit) — gentle ramp-up; ~1.5 h standing/day.")
                 bulletRow("Intermediate (30 / 30) — the 1:1 sweet spot recommended by most ergonomists; ~4 h standing/day.")
-                bulletRow("Advanced (45 / 30) — approaches a 3:1 standing-to-sitting ratio; caps continuous standing at 45 min.")
+                bulletRow("Advanced (45 / 30) — a 1.5:1 standing-to-sitting ratio; caps continuous standing at 45 min.")
                 bulletRow("Follow-the-science default equals Intermediate.")
             }
             .font(.body)

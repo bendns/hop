@@ -30,6 +30,7 @@ struct HopApp: App {
         Window("History", id: "history") {
             HistoryView()
                 .environmentObject(history)
+                .environmentObject(settings)
         }
         .defaultSize(width: 640, height: 480)
     }

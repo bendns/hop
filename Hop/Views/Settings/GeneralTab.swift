@@ -2,13 +2,14 @@ import SwiftUI
 
 struct GeneralTab: View {
     @EnvironmentObject private var store: SettingsStore
+    @State private var launchAtLogin = LoginItemManager.isEnabled
 
     var body: some View {
         Form {
             Section("Mode") {
                 Picker("", selection: presetBinding) {
                     ForEach(presetModes) { mode in
-                        Text(mode.displayName).tag(mode)
+                        Text(mode.displayName).tag(Optional(mode))
                     }
                 }
                 .pickerStyle(.segmented)
@@ -54,32 +55,31 @@ struct GeneralTab: View {
 
             Section("Notifications") {
                 Toggle("Enable notifications", isOn: $store.settings.notificationsEnabled)
+                // SMAppService is the source of truth: registration can fail
+                // or be revoked from System Settings.
                 Toggle("Launch at login", isOn: Binding(
-                    get: { store.settings.launchAtLogin },
+                    get: { launchAtLogin },
                     set: { newValue in
-                        store.settings.launchAtLogin = newValue
                         LoginItemManager.setEnabled(newValue)
+                        launchAtLogin = LoginItemManager.isEnabled
                     }
                 ))
             }
         }
         .formStyle(.grouped)
+        .onAppear { launchAtLogin = LoginItemManager.isEnabled }
     }
 
     // MARK: - Bindings
 
     private let presetModes: [Mode] = [.science, .beginner, .intermediate, .advanced]
 
-    private var presetBinding: Binding<Mode> {
+    /// nil while in custom mode, so no preset segment looks selected.
+    private var presetBinding: Binding<Mode?> {
         Binding(
-            get: {
-                if store.settings.mode == .custom {
-                    return .science
-                }
-                return store.settings.mode
-            },
+            get: { store.settings.mode == .custom ? nil : store.settings.mode },
             set: { newValue in
-                store.settings.mode = newValue
+                if let newValue { store.settings.mode = newValue }
             }
         )
     }

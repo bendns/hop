@@ -8,13 +8,11 @@ struct MenuPopoverView: View {
     @EnvironmentObject private var settings: SettingsStore
     @Environment(\.openWindow) private var openWindow
 
-    @State private var tick: Date = Date()
     @State private var authStatus: UNAuthorizationStatus = .notDetermined
     @State private var cardPulse: CGFloat = 1.0
-    private let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
     private var isStanding: Bool { scheduler.currentPosture == .standing }
-    private var isPaused: Bool { settings.settings.pausedUntil != nil }
+    private var isPaused: Bool { scheduler.status == .paused }
 
     var body: some View {
         VStack(alignment: .leading, spacing: HopSpacing.lg) {
@@ -22,15 +20,19 @@ struct MenuPopoverView: View {
                 permissionBanner
             }
             header
-            stateCard
+            // Only the time-dependent parts re-render every second.
+            TimelineView(.periodic(from: .now, by: 1)) { context in
+                stateCard(now: context.date)
+            }
             primaryAction
             secondaryActions
-            statsStrip
+            TimelineView(.periodic(from: .now, by: 1)) { context in
+                statsStrip(now: context.date)
+            }
             footer
         }
         .padding(HopSpacing.lg)
         .frame(width: HopLayout.popoverWidth)
-        .onReceive(timer) { tick = $0 }
         .task { await refreshAuthStatus() }
         .onChange(of: scheduler.currentPosture) { _ in pulse() }
     }
@@ -65,7 +67,7 @@ struct MenuPopoverView: View {
 
     // MARK: - State card
 
-    private var stateCard: some View {
+    private func stateCard(now: Date) -> some View {
         VStack(spacing: HopSpacing.sm) {
             Image(systemName: postureIconName)
                 .font(.system(size: HopLayout.stateIconSize, weight: .regular))
@@ -78,7 +80,7 @@ struct MenuPopoverView: View {
             VStack(spacing: HopSpacing.xs) {
                 Text(isStanding ? "Standing" : "Sitting")
                     .font(.title2.weight(.semibold))
-                countdownLine
+                countdownLine(now: now)
             }
         }
         .frame(maxWidth: .infinity)
@@ -90,17 +92,17 @@ struct MenuPopoverView: View {
         )
         .scaleEffect(cardPulse)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel(stateCardAccessibility)
+        .accessibilityLabel(stateCardAccessibility(now: now))
     }
 
-    private var countdownLine: some View {
+    private func countdownLine(now: Date) -> some View {
         Group {
             if scheduler.status != .working {
                 Text(statusLabel)
                     .font(.caption.weight(.medium))
                     .foregroundStyle(.secondary)
             } else if let next = scheduler.nextTransitionAt {
-                let remaining = max(0, next.timeIntervalSince(tick))
+                let remaining = max(0, next.timeIntervalSince(now))
                 Text("in \(format(remaining))")
                     .font(.body)
                     .monospacedDigit()
@@ -122,7 +124,7 @@ struct MenuPopoverView: View {
         case .working:            return ""
         case .onLunchBreak:       return "Lunch break"
         case .outsideWorkHours:   return "Outside work hours"
-        case .weekend, .disabled: return "Day off"
+        case .disabled:           return "Day off"
         case .officeDay:          return "Office day"
         case .onVacation:         return "On vacation"
         case .paused:             return "Paused for today"
@@ -130,10 +132,10 @@ struct MenuPopoverView: View {
         }
     }
 
-    private var stateCardAccessibility: String {
+    private func stateCardAccessibility(now: Date) -> String {
         let posture = isStanding ? "standing" : "sitting"
         if scheduler.status == .working, let next = scheduler.nextTransitionAt {
-            let remaining = max(0, Int(next.timeIntervalSince(tick)) / 60)
+            let remaining = max(0, Int(next.timeIntervalSince(now)) / 60)
             return "Currently \(posture). Next switch in \(remaining) minutes."
         }
         return "Currently \(posture). \(statusLabel)"
@@ -162,20 +164,23 @@ struct MenuPopoverView: View {
 
     private var secondaryActions: some View {
         HStack(spacing: HopSpacing.sm) {
-            secondaryButton(
-                label: "Snooze 10m",
-                systemImage: "alarm",
-                action: {
-                    scheduler.handleNotificationAction(.snooze, nextPosture: scheduler.currentPosture.toggled)
-                }
-            )
-            secondaryButton(
-                label: "Skip",
-                systemImage: "forward",
-                action: {
-                    scheduler.handleNotificationAction(.skip, nextPosture: scheduler.currentPosture.toggled)
-                }
-            )
+            Group {
+                secondaryButton(
+                    label: "Snooze 10m",
+                    systemImage: "alarm",
+                    action: {
+                        scheduler.handleNotificationAction(.snooze, nextPosture: scheduler.currentPosture.toggled)
+                    }
+                )
+                secondaryButton(
+                    label: "Skip",
+                    systemImage: "forward",
+                    action: {
+                        scheduler.handleNotificationAction(.skip, nextPosture: scheduler.currentPosture.toggled)
+                    }
+                )
+            }
+            .disabled(scheduler.status != .working)
             secondaryButton(
                 label: isPaused ? "Resume" : "Pause today",
                 systemImage: isPaused ? "play.circle" : "pause.circle",
@@ -201,9 +206,12 @@ struct MenuPopoverView: View {
 
     // MARK: - Stats strip
 
-    private var statsStrip: some View {
-        let events = history.eventsForToday(now: tick)
-        let totals = MenuPopoverView.totals(for: events, now: tick, current: scheduler.currentPosture)
+    private func statsStrip(now: Date) -> some View {
+        let totals = PostureStats.totals(
+            for: history.eventsForToday(now: now),
+            until: now,
+            settings: settings.settings
+        )
         return HStack(spacing: HopSpacing.xl) {
             statCell(systemImage: "figure.stand", label: "Standing", value: format(totals.stand))
             Divider().frame(height: 28)
@@ -285,18 +293,5 @@ struct MenuPopoverView: View {
         let m = (total % 3600) / 60
         let s = total % 60
         return h > 0 ? String(format: "%dh %02dm", h, m) : String(format: "%02d:%02d", m, s)
-    }
-
-    /// Collapses events into total sit / stand seconds up to `now`.
-    static func totals(for events: [PostureEvent], now: Date, current: Posture) -> (sit: TimeInterval, stand: TimeInterval) {
-        var sit: TimeInterval = 0
-        var stand: TimeInterval = 0
-        let sorted = events.sorted { $0.timestamp < $1.timestamp }
-        for (i, e) in sorted.enumerated() {
-            let end = i + 1 < sorted.count ? sorted[i + 1].timestamp : now
-            let delta = max(0, end.timeIntervalSince(e.timestamp))
-            if e.posture == .sitting { sit += delta } else { stand += delta }
-        }
-        return (sit, stand)
     }
 }

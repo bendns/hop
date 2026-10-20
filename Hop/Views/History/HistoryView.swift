@@ -4,6 +4,7 @@ import UniformTypeIdentifiers
 
 struct HistoryView: View {
     @EnvironmentObject private var history: HistoryStore
+    @EnvironmentObject private var settings: SettingsStore
     @State private var tab: Tab = .today
     @State private var showResetConfirm = false
     @State private var now = Date()
@@ -50,10 +51,14 @@ struct HistoryView: View {
     @ViewBuilder private var chartSection: some View {
         switch tab {
         case .today:
-            TodayChart(events: history.eventsForToday(now: now), now: now)
+            TodayChart(segments: PostureStats.segments(
+                for: history.eventsForToday(now: now),
+                until: now,
+                settings: settings.settings
+            ))
                 .frame(height: 200)
         case .week:
-            WeekChart(events: history.eventsForWeek(now: now), now: now)
+            WeekChart(events: history.eventsForWeek(now: now), now: now, settings: settings.settings)
                 .frame(height: 240)
         }
     }
