@@ -1,22 +1,22 @@
 .PHONY: gen build test install run clean icon
 
-DERIVED := $(HOME)/Library/Developer/Xcode/DerivedData
+DERIVED := build
 APP_NAME := Hop.app
-BUILT_APP := $(shell find $(DERIVED) -maxdepth 5 -type d -name $(APP_NAME) -path "*Hop-*/Build/Products/Debug/*" 2>/dev/null | head -1)
+BUILT_APP := $(DERIVED)/Build/Products/Debug/$(APP_NAME)
 INSTALL_DIR := /Applications
 
 gen:
 	xcodegen generate
 
 build: gen
-	xcodebuild -project Hop.xcodeproj -scheme Hop -configuration Debug build
+	xcodebuild -project Hop.xcodeproj -scheme Hop -configuration Debug -derivedDataPath $(DERIVED) build
 
 test: gen
-	xcodebuild -project Hop.xcodeproj -scheme Hop test
+	xcodebuild -project Hop.xcodeproj -scheme Hop -derivedDataPath $(DERIVED) test
 
 install: build
 	@killall Hop 2>/dev/null || true
-	@test -n "$(BUILT_APP)" || (echo "Built app not found under $(DERIVED)"; exit 1)
+	@test -d "$(BUILT_APP)" || (echo "Built app not found at $(BUILT_APP)"; exit 1)
 	rm -rf $(INSTALL_DIR)/$(APP_NAME)
 	cp -R "$(BUILT_APP)" $(INSTALL_DIR)/
 	@echo "Installed to $(INSTALL_DIR)/$(APP_NAME)"
@@ -29,4 +29,4 @@ icon:
 
 clean:
 	rm -rf Hop.xcodeproj
-	rm -rf $(DERIVED)/Hop-*
+	rm -rf $(DERIVED)

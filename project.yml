@@ -24,6 +24,8 @@ targets:
       properties:
         LSUIElement: true
         CFBundleDisplayName: Hop!
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         NSHumanReadableCopyright: ""
     entitlements:
       path: Hop/Hop.entitlements

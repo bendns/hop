@@ -24,9 +24,11 @@ jobs:
 
       - name: Resolve version
         id: ver
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            TAG="${{ inputs.tag }}"
+            TAG="$INPUT_TAG"
           else
             TAG="${GITHUB_REF##*/}"
           fi
