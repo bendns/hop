@@ -135,8 +135,7 @@ jobs:
           ### Install via Homebrew
 
           \`\`\`
-          brew tap bendns/hop
-          brew install --cask hop
+          brew install --cask bendns/hop/hop-app
           \`\`\`
 
           On first launch, macOS may block the app because it's ad-hoc signed. Right-click \`/Applications/Hop.app\` → Open → Open.
@@ -170,7 +169,7 @@ jobs:
           cat <<EOF
 
           ========================================================
-          Update Casks/hop.rb in bendns/homebrew-hop with:
+          Update Casks/hop-app.rb in bendns/homebrew-hop with:
 
               version "$VERSION"
               sha256 "$SHA256"
