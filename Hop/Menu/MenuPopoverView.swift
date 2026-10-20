@@ -9,6 +9,8 @@ struct MenuPopoverView: View {
     @Environment(\.openWindow) private var openWindow
 
     @State private var authStatus: UNAuthorizationStatus = .notDetermined
+    /// False while the menu bar window is closed, so the clocks below stop ticking.
+    @State private var isVisible = true
 
     private var posture: Posture { scheduler.currentPosture }
     private var isWorking: Bool { scheduler.status == .working }
@@ -21,11 +23,11 @@ struct MenuPopoverView: View {
                 permissionBanner
             }
             // Only the time-dependent parts re-render every second.
-            TimelineView(.periodic(from: .now, by: 1)) { context in
+            TimelineView(PausableEverySecondSchedule(isPaused: !isVisible)) { context in
                 hero(now: context.date)
             }
             actions
-            TimelineView(.periodic(from: .now, by: 1)) { context in
+            TimelineView(PausableEverySecondSchedule(isPaused: !isVisible)) { context in
                 goalCard(now: context.date)
             }
             footer
@@ -33,6 +35,7 @@ struct MenuPopoverView: View {
         .padding(HopSpacing.lg)
         .frame(width: HopLayout.popoverWidth)
         .task { await refreshAuthStatus() }
+        .onWindowVisibilityChange { isVisible = $0 }
     }
 
     // MARK: - Header
